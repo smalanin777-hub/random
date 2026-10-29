@@ -1,22 +1,23 @@
-#ifndef __SMALLALLOC__ 
+#ifndef __SMALLALLOC__
 #define __SMALLALLOC__
 
-struct MetaData {
-    bool is_busy;
-    unsigned int size;
+struct alignas(64) MetaData {
+  bool is_busy;
+  unsigned long long size;
 };
 
 class SmallAllocator {
 private:
-    char Memory[1048576];
-    char* begin;
-    char* end;
+  unsigned long long size;
+  char *begin;
+  char *end;
 
 public:
-    SmallAllocator();
-    void* Alloc(unsigned int Size);
-    void* ReAlloc(void* Pointer, unsigned int Size);
-    void Free(void* Pointer);
+  SmallAllocator(unsigned long long pool_sz = 1048576);
+  ~SmallAllocator();
+  void *Alloc(unsigned int Size);
+  void *ReAlloc(void *Pointer, unsigned int Size);
+  void Free(void *Pointer);
 };
 
 #endif
