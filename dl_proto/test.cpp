@@ -32,7 +32,10 @@ int main() {
     if (epoch == 10) {
       optimizer.set_step(0.0001f);
     }
-    if (epoch == 30) {
+    if (epoch == 40) {
+      optimizer.set_step(0.0008f);
+    }
+    if (epoch == 80) {
       optimizer.set_step(0.001f);
     }
     if (epoch == 100) {
