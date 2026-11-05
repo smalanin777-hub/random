@@ -3,15 +3,15 @@
 #include <cstring>
 #include <sys/mman.h>
 
-SmallAllocator::SmallAllocator(unsigned long long pool_sz) : size(pool_sz) {
-  begin = reinterpret_cast<char *>(mmap(nullptr, pool_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+SmallAllocator::SmallAllocator(unsigned long long pool_sz) : size(((pool_sz + 63) & ~(63)) + 2 * sizeof(MetaData)) {
+  begin = reinterpret_cast<char *>(mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   if (begin == MAP_FAILED) {
     begin = nullptr;
     end = nullptr;
   }
-  end = begin + pool_sz;
-  *(reinterpret_cast<MetaData *>(begin)) = {0, pool_sz - 2 * sizeof(MetaData)};
-  *(reinterpret_cast<MetaData *>(end - sizeof(MetaData))) = {0, pool_sz - 2 * sizeof(MetaData)};
+  end = begin + size;
+  *(reinterpret_cast<MetaData *>(begin)) = {0, size};
+  *(reinterpret_cast<MetaData *>(end - sizeof(MetaData))) = {0, size};
 }
 SmallAllocator::~SmallAllocator() {
   if (begin)
@@ -25,33 +25,38 @@ void *SmallAllocator::Alloc(unsigned int Size) {
     return allocated;
   }
   Size = (Size + 63) & ~(63);
-  while (i + sizeof(MetaData) < size) {
-    if (reinterpret_cast<MetaData *>(begin + i)->is_busy) {
-      i += reinterpret_cast<MetaData *>(begin + i)->size;
+  while (i < size && (size - i) >= sizeof(MetaData)) {
+    MetaData *current = reinterpret_cast<MetaData *>(begin + i);
+    if (current->size == 0)
+      break;
+    if (current->is_busy) {
+      i += current->size;
       continue;
-    } else if (!(reinterpret_cast<MetaData *>(begin + i)->is_busy) &&
-               reinterpret_cast<MetaData *>(begin + i)->size >= Size + 2 * sizeof(MetaData)) {
+    } else if (current->size >= Size + 2 * sizeof(MetaData)) {
       MetaData *free_mem = reinterpret_cast<MetaData *>(begin + i);
       unsigned int old_free_size = free_mem->size;
-      if (reinterpret_cast<MetaData *>(begin + i)->size > Size + 2 * sizeof(MetaData)) {
-        *(reinterpret_cast<MetaData *>(begin + i)) = {1, (unsigned int)(Size + 2 * sizeof(MetaData))};
+      if (current->size > Size + 2 * sizeof(MetaData)) {
+        *(current) = {1, (unsigned int)(Size + 2 * sizeof(MetaData))};
         i += sizeof(MetaData);
         allocated = static_cast<void *>(begin + i);
         i += Size;
-        *(reinterpret_cast<MetaData *>(begin + i)) = {1, (unsigned int)(Size + 2 * sizeof(MetaData))};
+        current = reinterpret_cast<MetaData *>(begin + i);
+        *current = {1, (unsigned int)(Size + 2 * sizeof(MetaData))};
         i += sizeof(MetaData);
-        *(reinterpret_cast<MetaData *>(begin + i)) = {0, old_free_size - (unsigned int)(Size + 2 * sizeof(MetaData))};
+        current = reinterpret_cast<MetaData *>(begin + i);
+        *current = {0, old_free_size - (unsigned int)(Size + 2 * sizeof(MetaData))};
         reinterpret_cast<MetaData *>((char *)free_mem + old_free_size - sizeof(MetaData))->size =
             old_free_size - (Size + 2 * sizeof(MetaData));
+        reinterpret_cast<MetaData *>((char *)free_mem + old_free_size - sizeof(MetaData))->is_busy = 0;
         break;
       } else {
-        *(reinterpret_cast<MetaData *>(begin + i)) = {1, (unsigned int)(Size + 2 * sizeof(MetaData))};
+        *current = {1, (unsigned int)(Size + 2 * sizeof(MetaData))};
         allocated = static_cast<void *>(begin + i + sizeof(MetaData));
         reinterpret_cast<MetaData *>((char *)free_mem + free_mem->size - sizeof(MetaData))->is_busy = 1;
         break;
       }
     } else {
-      i += reinterpret_cast<MetaData *>(begin + i)->size;
+      i += current->size;
     }
   }
   if (!allocated)
@@ -74,12 +79,14 @@ void *SmallAllocator::ReAlloc(void *Pointer, unsigned int Size) {
             *(reinterpret_cast<MetaData *>((char *)self_mem + self_mem->size)) = {0, second_mem->size + (old_size - self_mem->size)};
             reinterpret_cast<MetaData *>((char *)second_mem + second_mem->size - sizeof(MetaData))->size =
                 second_mem->size + (old_size - self_mem->size);
+            reinterpret_cast<MetaData *>((char *)second_mem + second_mem->size - sizeof(MetaData))->is_busy = 0;
           }
         } else if (second_mem->is_busy) {
           if (old_size - self_mem->size > 2 * sizeof(MetaData)) {
-            *(reinterpret_cast<MetaData *>((char *)self_mem + self_mem->size - sizeof(MetaData))) = {1, self_mem->size};
             *(reinterpret_cast<MetaData *>((char *)self_mem + self_mem->size)) = {0, old_size - self_mem->size};
             *(reinterpret_cast<MetaData *>((char *)self_mem + old_size - sizeof(MetaData))) = {0, old_size - self_mem->size};
+            reinterpret_cast<MetaData *>((char *)self_mem + self_mem->size)->is_busy = 0;
+            reinterpret_cast<MetaData *>((char *)self_mem + old_size - sizeof(MetaData))->is_busy = 0;
           }
         }
       }
@@ -106,11 +113,13 @@ void SmallAllocator::Free(void *Pointer) {
   if ((char *)next_mem < end && !next_mem->is_busy && next_mem->size > 0) {
     self_mem->size += next_mem->size;
     reinterpret_cast<MetaData *>((char *)self_mem + self_mem->size - sizeof(MetaData))->size = self_mem->size;
+    reinterpret_cast<MetaData *>((char *)self_mem + self_mem->size - sizeof(MetaData))->is_busy = 0;
   }
   MetaData *prev_footer = reinterpret_cast<MetaData *>((char *)self_mem - sizeof(MetaData));
   if ((char *)prev_footer >= begin && !prev_footer->is_busy && prev_footer->size > 0) {
     MetaData *prev_header = reinterpret_cast<MetaData *>((char *)self_mem - prev_footer->size);
     prev_header->size += self_mem->size;
     reinterpret_cast<MetaData *>((char *)prev_header + prev_header->size - sizeof(MetaData))->size = prev_header->size;
+    reinterpret_cast<MetaData *>((char *)prev_header + prev_header->size - sizeof(MetaData))->is_busy = 0;
   }
 }
