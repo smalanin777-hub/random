@@ -4,5 +4,5 @@ lib: matrices.hpp matrices.cpp tensor.hpp tensor.cpp m_operations.cpp m_operatio
 main: libSmallDL.so optimizer.hpp test.cpp 
 	dpclang++ test.cpp -O3 -fsycl -L. -lSmallDL -Wl,-rpath,. -o test.out
 clean:
-	rm libmatrices.so test.out
+	rm libSmallDL.so test.out
 	
