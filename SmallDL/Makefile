@@ -1,8 +1,24 @@
+#SmallDL Makefile
+
+CXX = dpclang++
+CXXFLAGS = -O3 -fsycl -I./core -I./nn -I./optim
+LIB_FLAGS = -fPIC -shared
+LIB_SRCS = ./nn/matrices.cpp ./nn/tensor.cpp ./nn/m_operations.cpp
+LIB_HDRS = ./core/matrices.hpp ./core/tensor.hpp ./core/m_operations.hpp
+
+.PHONY: all lib main clean
+
 all: lib main
-lib: matrices.hpp matrices.cpp tensor.hpp tensor.cpp m_operations.cpp m_operations.hpp
-	dpclang++ matrices.cpp tensor.cpp m_operations.cpp -fPIC -shared -O3 -fsycl -o libSmallDL.so
-main: libSmallDL.so optimizer.hpp test.cpp 
-	dpclang++ test.cpp -O3 -fsycl -L. -lSmallDL -Wl,-rpath,. -o test.out
+
+libSmallDL.so: $(LIB_SRCS) $(LIB_HDRS)
+	$(CXX) $(LIB_SRCS) $(CXXFLAGS) $(LIB_FLAGS) -o $@
+
+lib: libSmallDL.so
+
+test.out: ./examples/test.cpp libSmallDL.so ./optim/optimizer.hpp
+	$(CXX) $< $(CXXFLAGS) -L. -lSmallDL -Wl,-rpath,. -o $@
+
+main: test.out
+
 clean:
-	rm libSmallDL.so test.out
-	
+	rm -f libSmallDL.so test.out
