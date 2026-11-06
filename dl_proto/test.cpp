@@ -1,4 +1,5 @@
 #include "matrices.hpp"
+#include "m_operations.hpp"
 #include "optimizer.hpp"
 #include <chrono>
 #include <iostream>
@@ -13,8 +14,8 @@ int main() {
 
   Matrix x_mat(BATCH_SIZE, INPUT_DIM);
   Matrix y_mat(BATCH_SIZE, OUTPUT_DIM);
-  x_mat.generate_matrix();
-  y_mat.generate_matrix();
+  ops::generate_matrix(x_mat);
+  ops::generate_matrix(y_mat);
 
   auto X = std::make_shared<Tensor>(std::move(x_mat), false);
   auto Y = std::make_shared<Tensor>(std::move(y_mat), false);
@@ -46,12 +47,12 @@ int main() {
     auto prediction = layer3.forward(a2);
     auto loss = mse_loss(prediction, Y);
 
-    float current_loss = prediction->data.mse_loss_forward(Y->data);
+    float current_loss = ops::mse_loss_forward(prediction->data, Y->data);
 
     optimizer.zero_grad();
-    a1->grad *= 0.0f;
-    a2->grad *= 0.0f;
-    prediction->grad *= 0.0f;
+    ops::scale_(a1->grad, 0.0f);
+    ops::scale_(a2->grad, 0.0f);
+    ops::scale_(prediction->grad, 0.0f);
 
     loss->backward();
     optimizer.step();

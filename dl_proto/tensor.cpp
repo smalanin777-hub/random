@@ -1,21 +1,22 @@
+#include "m_operations.hpp"
 #include "tensor.hpp"
 #include <algorithm>
 #include <iostream>
 
 Tensor::Tensor(Matrix m, bool req_grad)
     : data(std::move(m)), grad(data.get_rows(), data.get_columns()), requires_grad(req_grad), operation(""), backward_operation(nullptr) {
-  grad *= 0.0f;
+  ops::scale_(grad, 0.0f);
 }
 
 Tensor::Tensor(unsigned int rows, unsigned int columns, sycl::queue q, bool req_grad)
     : data(rows, columns, q), grad(rows, columns, q), requires_grad(req_grad), operation(""), backward_operation(nullptr) {
-  grad *= 0.0f;
+  ops::scale_(grad, 0.0f);
 }
 
 void Tensor::backward() {
   if (operation == "mse_loss") {
-    grad *= 0.0f;
-    grad += 1.0f;
+    ops::scale_(grad, 0.0f);
+    ops::add_scalar_(grad, 1.0f);
   }
   if (backward_operation)
     backward_operation();
@@ -26,7 +27,7 @@ void Tensor::backward() {
 }
 
 std::shared_ptr<Tensor> matmul(std::shared_ptr<Tensor> a, std::shared_ptr<Tensor> b) {
-  Matrix m = a->data * b->data;
+  Matrix m = ops::matmul(a->data, b->data);
   bool req_grad = a->requires_grad || b->requires_grad;
   std::shared_ptr<Tensor> out = std::make_shared<Tensor>(std::move(m), req_grad);
   out->operation = "matmul";
@@ -38,14 +39,14 @@ std::shared_ptr<Tensor> matmul(std::shared_ptr<Tensor> a, std::shared_ptr<Tensor
       if (!out)
         return;
       if (a->requires_grad) {
-        Matrix t_b = b->data.transpose();
-        Matrix g_a = out->grad * t_b;
-        a->grad = a->grad + g_a;
+        Matrix t_b = ops::transpose(b->data);
+        Matrix g_a = ops::matmul(out->grad, t_b);
+        ops::add_(a->grad, g_a);
       }
       if (b->requires_grad) {
-        Matrix t_a = a->data.transpose();
-        Matrix g_b = t_a * out->grad;
-        b->grad = b->grad + g_b;
+        Matrix t_a = ops::transpose(a->data);
+        Matrix g_b = ops::matmul(t_a, out->grad);
+        ops::add_(b->grad, g_b);
       }
     };
   }
@@ -53,8 +54,8 @@ std::shared_ptr<Tensor> matmul(std::shared_ptr<Tensor> a, std::shared_ptr<Tensor
 }
 
 std::shared_ptr<Tensor> add_bias(std::shared_ptr<Tensor> a, std::shared_ptr<Tensor> b) {
-  Matrix m = a->data;
-  m.add_bias(b->data);
+  Matrix m(a->data);
+  ops::add_bias_(m, b->data);
   bool req_grad = a->requires_grad || b->requires_grad;
   std::shared_ptr<Tensor> out = std::make_shared<Tensor>(std::move(m), req_grad);
   out->operation = "add_bias";
@@ -66,7 +67,7 @@ std::shared_ptr<Tensor> add_bias(std::shared_ptr<Tensor> a, std::shared_ptr<Tens
       if (!out)
         return;
       if (a->requires_grad) {
-        a->grad = a->grad + out->grad;
+        ops::add_(a->grad, out->grad);
       }
       if (b->requires_grad) {
         unsigned int out_rows = out->grad.get_rows();
@@ -75,15 +76,18 @@ std::shared_ptr<Tensor> add_bias(std::shared_ptr<Tensor> a, std::shared_ptr<Tens
         Matrix g_b(1, b_cols, q);
         float *gb_ptr = g_b.data();
         const float *out_g_ptr = out->grad.data();
-        q.parallel_for(sycl::range<1>(b_cols), [=](sycl::id<1> id) {
-           unsigned int c = id[0];
-           float sum = 0.0f;
-           for (unsigned int r = 0; r < out_rows; ++r) {
-             sum += out_g_ptr[r * b_cols + c];
-           }
-           gb_ptr[c] = sum;
-         }).wait();
-        b->grad = b->grad + g_b;
+        g_b.last_event = q.submit([&](sycl::handler &h){
+          h.depends_on(out->grad.last_event);   
+          h.parallel_for(sycl::range<1>(b_cols), [=](sycl::id<1> id) {
+            unsigned int c = id[0];
+            float sum = 0.0f;
+            for (unsigned int r = 0; r < out_rows; ++r) {
+              sum += out_g_ptr[r * b_cols + c];
+            }
+            gb_ptr[c] = sum;
+          });
+        });
+        ops::add_(b->grad, g_b);
       }
     };
   }
@@ -91,7 +95,7 @@ std::shared_ptr<Tensor> add_bias(std::shared_ptr<Tensor> a, std::shared_ptr<Tens
 }
 
 std::shared_ptr<Tensor> relu(std::shared_ptr<Tensor> a) {
-  Matrix m = a->data.relu_forward();
+  Matrix m = ops::relu_forward(a->data);
   bool req_grad = a->requires_grad;
   std::shared_ptr<Tensor> out = std::make_shared<Tensor>(std::move(m), req_grad);
   out->operation = "relu";
@@ -102,8 +106,8 @@ std::shared_ptr<Tensor> relu(std::shared_ptr<Tensor> a) {
       if (!out)
         return;
       if (a->requires_grad) {
-        Matrix g_a = a->data.relu_backward(out->grad);
-        a->grad = a->grad + g_a;
+        Matrix g_a = ops::relu_backward(a->data, out->grad);
+        ops::add_(a->grad, g_a);
       }
     };
   }
@@ -111,9 +115,10 @@ std::shared_ptr<Tensor> relu(std::shared_ptr<Tensor> a) {
 }
 
 std::shared_ptr<Tensor> mse_loss(std::shared_ptr<Tensor> pred, std::shared_ptr<Tensor> target) {
-  float loss = pred->data.mse_loss_forward(target->data);
+  float loss = ops::mse_loss_forward(pred->data, target->data);
   Matrix loss_m(1, 1, global_q);
   loss_m.data()[0] = loss;
+  loss_m.last_event = loss_m.q.ext_oneapi_submit_barrier();
   std::shared_ptr<Tensor> out = std::make_shared<Tensor>(std::move(loss_m), true);
   out->operation = "mse_loss";
   out->input.push_back(pred);
@@ -123,8 +128,8 @@ std::shared_ptr<Tensor> mse_loss(std::shared_ptr<Tensor> pred, std::shared_ptr<T
     if (!out)
       return;
     if (pred->requires_grad) {
-      Matrix g_pred = pred->data.mse_loss_backward(target->data);
-      pred->grad = pred->grad + g_pred;
+      Matrix g_pred = ops::mse_loss_backward(pred->data, target->data);
+      ops::add_(pred->grad, g_pred);
     }
   };
   return out;

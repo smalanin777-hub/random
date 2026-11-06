@@ -2,6 +2,7 @@
 #define TENSOR_HPP
 
 #include "matrices.hpp"
+#include "m_operations.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -30,8 +31,8 @@ struct Layer {
   Layer(unsigned int in, unsigned int out, sycl::queue q = global_q) {
     W = std::make_shared<Tensor>(in, out, q, true);
     b = std::make_shared<Tensor>(1, out, q, true);
-    W->data.generate_matrix();
-    b->data *= 0.0f;
+    ops::generate_matrix(W->data);
+    ops::scale_(b->data, 0.0f);
   }
   std::shared_ptr<Tensor> forward(std::shared_ptr<Tensor> a) { return add_bias(matmul(a, W), b); }
 };
