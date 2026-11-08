@@ -3,6 +3,7 @@
 
 #include "tensor.hpp"
 #include "m_operations.hpp"
+#include "memory.hpp"
 #include <memory>
 #include <vector>
 
@@ -12,23 +13,26 @@ private:
   float step_size;
 
 public:
-  GD(std::vector<std::shared_ptr<Tensor>> pars, float step_size) : params(pars), step_size(step_size) {}
+  GD(std::vector<std::shared_ptr<Tensor>> pars, float step_size)
+    : params(pars), step_size(step_size) {}
+
   void zero_grad() {
     for (auto &i : params)
-      ops::scale_(i->grad, 0.0f);
+      ops::scale_(i->grad, 0.0f, i->memory);
   }
+
   void step() {
     for (auto &i : params) {
       if (i->requires_grad) {
-        Matrix step_m = ops::scale(i->grad, step_size);
-        ops::scale_(step_m, -1.0f);
-        ops::add_(i->data, step_m);
+        Matrix step_m = ops::scale(i->grad, step_size, &temp_chunk);
+        ops::scale_(step_m, -1.0f, &temp_chunk);
+        ops::add_(i->data, step_m, i->memory);
       }
     }
   }
-  void set_step(float new_step) { 
+
+  void set_step(float new_step) {
     step_size = new_step;
   }
 };
-
 #endif
