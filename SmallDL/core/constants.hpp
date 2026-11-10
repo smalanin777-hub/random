@@ -27,7 +27,7 @@ inline const unsigned int TILE_DIM = pow2_v<4>;
 
 //memory constants
 
-inline sycl::queue global_q(sycl::gpu_selector_v, sycl::property::queue::in_order());
+inline sycl::queue global_q(sycl::gpu_selector_v);
 
 inline mem::ArenaAlloc global_alloc{pow2_v<24>, global_q};
 inline mem::ArenaAlloc temp_alloc{pow2_v<26>, global_q};

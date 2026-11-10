@@ -28,7 +28,7 @@ ArenaAlloc& ArenaAlloc::operator=(ArenaAlloc&& other) noexcept{
   return *this;
 }
 float* ArenaAlloc::alloc(unsigned long count){
-  unsigned long real_size = count * sizeof(float);
+  unsigned long real_size = (count * sizeof(float) + 63) & ~63;
   long offset = current - begin;
   if(offset + real_size > size){
     std::cout << "Out of memory (need " << real_size << ", have " << size - offset << ")\n";
