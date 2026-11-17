@@ -4,9 +4,8 @@ CXX = dpclang++
 CXXFLAGS = -O3 -fsycl -I./core -I./nn -I./optim
 LIB_FLAGS = -fPIC -shared
 
-LIB_SRCS = ./nn/arena_alloc.cpp ./nn/matrices.cpp ./nn/tensor.cpp ./nn/m_operations.cpp
-LIB_HDRS = ./core/arena_alloc.hpp ./core/memory.hpp ./core/constants.hpp \
-           ./core/matrices.hpp ./core/m_operations.hpp ./core/tensor.hpp
+LIB_SRCS = ./nn/arena_alloc.cpp ./nn/matrices.cpp ./nn/tensor.cpp ./nn/layer.cpp ./nn/m_operations.cpp
+LIB_HDRS = ./core/arena_alloc.hpp ./core/matrices.hpp ./core/tensor.hpp ./core/layer.hpp ./core/m_operations.hpp ./core/constants.hpp 
 
 .PHONY: all lib main clean
 

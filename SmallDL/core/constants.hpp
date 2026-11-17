@@ -1,7 +1,7 @@
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
 
-#include"memory.hpp"
+#include"arena_alloc.hpp"
 #include<sycl/sycl.hpp>
 
 //helper zero-cost metafunction
@@ -31,8 +31,5 @@ inline sycl::queue global_q(sycl::gpu_selector_v);
 
 inline mem::ArenaAlloc global_alloc{pow2_v<24>, global_q};
 inline mem::ArenaAlloc temp_alloc{pow2_v<26>, global_q};
-
-inline mem::mem_chunk global_chunk{global_alloc};
-inline mem::mem_chunk temp_chunk{temp_alloc};
 
 #endif

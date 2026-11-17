@@ -1,16 +1,17 @@
-#include "m_operations.hpp"
 #include "tensor.hpp"
-#include "memory.hpp"
+#include "m_operations.hpp"
 #include <algorithm>
 #include <iostream>
 
-Tensor::Tensor(Matrix m, bool req_grad, mem::mem_chunk* memory)
-    : data(std::move(m)), grad(data.get_rows(), data.get_columns(), memory), requires_grad(req_grad), memory(memory), operation(""), backward_operation(nullptr) {
+Tensor::Tensor(Matrix m, bool req_grad, mem::ArenaAlloc *memory)
+    : data(std::move(m)), grad(data.get_rows(), data.get_columns(), memory), requires_grad(req_grad), memory(memory), operation(""),
+      backward_operation(nullptr) {
   ops::scale_(grad, 0.0f, memory);
 }
 
-Tensor::Tensor(unsigned int rows, unsigned int columns, bool req_grad, mem::mem_chunk* memory)
-    : data(rows, columns, memory), grad(rows, columns, memory), requires_grad(req_grad), operation(""), memory(memory), backward_operation(nullptr) {
+Tensor::Tensor(unsigned int rows, unsigned int columns, bool req_grad, mem::ArenaAlloc *memory)
+    : data(rows, columns, memory), grad(rows, columns, memory), requires_grad(req_grad), operation(""), memory(memory),
+      backward_operation(nullptr) {
   ops::scale_(grad, 0.0f, memory);
 }
 
@@ -76,8 +77,7 @@ std::shared_ptr<Tensor> add_bias(std::shared_ptr<Tensor> a, std::shared_ptr<Tens
         Matrix g_b(1, b_cols, a->memory);
         float *gb_ptr = g_b.data();
         const float *out_g_ptr = out->grad.data();
-        g_b.last_event = a->memory->q->submit([&](sycl::handler &h){
-          h.depends_on(out->grad.last_event);   
+        a->memory->events.push_back(a->memory->q.submit([&](sycl::handler &h) {
           h.parallel_for(sycl::range<1>(b_cols), [=](sycl::id<1> id) {
             unsigned int c = id[0];
             float sum = 0.0f;
@@ -86,7 +86,7 @@ std::shared_ptr<Tensor> add_bias(std::shared_ptr<Tensor> a, std::shared_ptr<Tens
             }
             gb_ptr[c] = sum;
           });
-        });
+        }));
         ops::add_(b->grad, g_b, a->memory);
       }
     };
@@ -117,12 +117,12 @@ std::shared_ptr<Tensor> relu(std::shared_ptr<Tensor> a) {
 std::shared_ptr<Tensor> mse_loss(std::shared_ptr<Tensor> pred, std::shared_ptr<Tensor> target) {
   float loss = ops::mse_loss_forward(pred->data, target->data, pred->memory);
   Matrix loss_m(1, 1, pred->memory);
-  loss_m.last_event = pred->memory->q->memcpy(loss_m.data(), &loss, sizeof(float));
+  pred->memory->events.push_back(pred->memory->q.memcpy(loss_m.data(), &loss, sizeof(float)));
   std::shared_ptr<Tensor> out = std::make_shared<Tensor>(std::move(loss_m), true, pred->memory);
   out->operation = "mse_loss";
   out->input.push_back(pred);
   out->input.push_back(target);
-  mem::mem_chunk* cur_mem = pred->memory;
+  mem::ArenaAlloc *cur_mem = pred->memory;
   out->backward_operation = [pred, target, cur_mem, weak_out = out->weak_from_this()]() {
     auto out = weak_out.lock();
     if (!out)
@@ -134,4 +134,3 @@ std::shared_ptr<Tensor> mse_loss(std::shared_ptr<Tensor> pred, std::shared_ptr<T
   };
   return out;
 }
-

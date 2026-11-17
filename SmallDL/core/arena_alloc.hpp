@@ -2,6 +2,7 @@
 #define ARENA_ALLOC_HPP
 
 #include<sycl/sycl.hpp>
+#include<vector>
 #include<iostream>
 
 namespace mem{
@@ -12,6 +13,7 @@ private:
   char* current;
   unsigned long size;
 public:
+  std::vector<sycl::event> events;
   sycl::queue q;
   ArenaAlloc(unsigned long size, sycl::queue q);
   ArenaAlloc(ArenaAlloc&& other) noexcept;
