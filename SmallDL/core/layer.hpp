@@ -1,14 +1,14 @@
 #ifndef LAYER_HPP
 #define LAYER_HPP
 
-#include "tensor.hpp"
-#include "constants.hpp"
+#include "graph.hpp"
 
-struct Layer{
-  std::shared_ptr<Tensor> a;
-  std::shared_ptr<Tensor> b;
-  Layer(unsigned int in, unsigned int out, mem::ArenaAlloc* memory = nullptr);
-  std::shared_ptr<Tensor> forward(std::shared_ptr<Tensor> t);
+struct Layer {
+  Tensor weight;
+  Tensor bias;
+  Tensor forward(Graph &g, Tensor a) const;
 };
+
+Layer make_layer(Graph &g, unsigned int in, unsigned int out);
 
 #endif

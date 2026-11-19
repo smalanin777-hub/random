@@ -39,10 +39,13 @@ float *ArenaAlloc::alloc(unsigned long count) {
   return allocated;
 }
 void ArenaAlloc::reset() {
-  for (sycl::event ev : events)
-    ev.wait();
-  events.clear();
   current = begin;
+}
+unsigned long ArenaAlloc::get_offset() const { 
+  return current - begin; 
+}
+void ArenaAlloc::reset_to(unsigned long offset) {
+  current = begin + offset;
 }
 ArenaAlloc::~ArenaAlloc() {
   if (begin)

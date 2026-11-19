@@ -8,11 +8,11 @@ private:
   unsigned int rows;
   unsigned int columns;
   float *data_;
-public:
 
-  Matrix(const unsigned int i = 0, const unsigned int j = 0, mem::ArenaAlloc* memory = nullptr);
-  Matrix(const Matrix &other_m, mem::ArenaAlloc* memory);
-  Matrix &copy(const Matrix &other_m, mem::ArenaAlloc* memory);
+public:
+  Matrix(const unsigned int i = 0, const unsigned int j = 0, mem::ArenaAlloc *memory = nullptr);
+  Matrix(const Matrix &other_m, mem::ArenaAlloc *memory);
+  Matrix &copy(const Matrix &other_m, mem::ArenaAlloc *memory);
   Matrix(const Matrix &other_m) = delete;
   Matrix &operator=(const Matrix &other_m) = delete;
   Matrix(Matrix &&other_m) noexcept;

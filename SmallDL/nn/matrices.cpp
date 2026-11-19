@@ -2,9 +2,7 @@
 #include "arena_alloc.hpp"
 
 Matrix::Matrix(const unsigned int i, const unsigned int j, mem::ArenaAlloc *memory)
-    : rows(i), columns(j), data_((memory) ? memory->alloc(i * j) : nullptr) {
-  memory->events.push_back(memory->q.fill(data_, 0.0f, i * j));
-}
+    : rows(i), columns(j), data_((memory) ? memory->alloc(i * j) : nullptr) {}
 Matrix::Matrix(const Matrix &other_m, mem::ArenaAlloc *memory)
     : rows(other_m.rows), columns(other_m.columns), data_(memory->alloc(rows * columns)) {
   memory->events.push_back(memory->q.memcpy(data_, other_m.data_, rows * columns * sizeof(float)));

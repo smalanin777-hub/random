@@ -1,35 +1,23 @@
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
 
-#include"arena_alloc.hpp"
-#include<sycl/sycl.hpp>
+#include <sycl/sycl.hpp>
 
-//helper zero-cost metafunction
+// helper zero-cost metafunction
 
-template<int x, int n>
-struct Power{
+template <int x, int n> struct Power {
   static const unsigned int val = x * Power<x, n - 1>::val;
 };
-template<int x>
-struct Power<x, 0>{
+template <int x> struct Power<x, 0> {
   static const unsigned int val = 1;
 };
 
-template<int n>
-constexpr unsigned int pow2_v = Power<2, n>::val;
-template<int x, int n>
-constexpr unsigned int pow_v = Power<x, n>::val;
+template <int n> constexpr unsigned int pow2_v = Power<2, n>::val;
+template <int x, int n> constexpr unsigned int pow_v = Power<x, n>::val;
 
-//numeric csontants
+// numeric csontants
 
 inline const unsigned int THREADSNUM = pow2_v<16>;
 inline const unsigned int TILE_DIM = pow2_v<4>;
-
-//memory constants
-
-inline sycl::queue global_q(sycl::gpu_selector_v);
-
-inline mem::ArenaAlloc global_alloc{pow2_v<24>, global_q};
-inline mem::ArenaAlloc temp_alloc{pow2_v<26>, global_q};
 
 #endif

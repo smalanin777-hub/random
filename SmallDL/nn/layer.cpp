@@ -1,9 +1,8 @@
 #include "layer.hpp"
+#include "t_operations.hpp"
 
-Layer::Layer(unsigned int in, unsigned int out, mem::ArenaAlloc *memory) {
-  a = std::make_shared<Tensor>(in, out, true, memory);
-  b = std::make_shared<Tensor>(1, out, true, memory);
-  ops::generate_matrix(a->data, memory);
-  ops::scale_(b->data, 0.0f, memory);
+Layer make_layer(Graph &g, unsigned int in, unsigned int out) { return Layer{g.param(in, out), g.param(1, out)}; }
+Tensor Layer::forward(Graph &g, Tensor a) const {
+  Tensor temp = g.emit<MatMul>(a, weight);
+  return g.emit<AddBias>(temp, bias);
 }
-std::shared_ptr<Tensor> Layer::forward(std::shared_ptr<Tensor> t) { return add_bias(matmul(t, a), b); }
